@@ -1,0 +1,107 @@
+# Caddy + SSL deployment
+services:
+  dcts-app:
+    container_name: dcts-app
+    image: ghcr.io/hackthedev/dcts-shipping:latest
+    depends_on:
+      - dcts-mariadb
+      - dcts-livekit
+    env_file: config.env
+    restart: unless-stopped
+    networks:
+      - caddy_network
+      - dcts_internal
+    volumes:
+      - ./DCTS-Data/dcts-app/sv:/app/sv
+      - ./DCTS-Data/dcts-app/configs:/app/configs
+      - ./DCTS-Data/dcts-app/uploads:/app/public/uploads
+      - ./DCTS-Data/dcts-app/emojis:/app/public/emojis
+      - ./DCTS-Data/dcts-app/plugins:/app/plugins
+
+  dcts-mariadb:
+    container_name: dcts-mariadb
+    image: mariadb:latest
+    env_file: config.env
+    networks:
+      - dcts_internal
+    volumes:
+      - ./DCTS-Data/MariaDB:/var/lib/mysql
+
+  dcts-redis:
+    container_name: dcts-redis
+    image: redis:alpine
+    networks:
+      - dcts_internal
+    volumes:
+      - dcts-redis-data:/data
+
+  dcts-livekit:
+    container_name: dcts-livekit
+    image: livekit/livekit-server:latest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        cat > /tmp/livekit.yaml <<EOF
+        port: $${LK_PORT}
+        rtc:
+            tcp_port: $${LK_RTC_TCP_PORT}
+            udp_port: $${LK_RTC_UDP_PORT}
+            use_external_ip: $${LK_USE_EXTERNAL_IP}
+            enable_loopback_candidate: $${LK_ENABLE_LOOPBACK_CANDIDATE}
+        redis:
+            address: $${LK_REDIS_ADDRESS}
+            username: "$${LK_REDIS_USERNAME}"
+            password: $${LK_REDIS_PASSWORD}
+            db: $${LK_REDIS_DB}
+            use_tls: $${LK_REDIS_USE_TLS}
+        turn:
+            enabled: $${LK_TURN_ENABLED}
+            domain: $${LIVEKIT_DOMAIN}
+            tls_port: $${LK_TURN_TLS_PORT}
+            udp_port: $${LK_TURN_UDP_PORT}
+            external_tls: $${LK_TURN_EXTERNAL_TLS}
+            cert_file: $${LK_TURN_CERT_FILE}
+            key_file: $${LK_TURN_KEY_FILE}
+        keys:
+            $${LIVEKIT_KEY}: $${LIVEKIT_SECRET}
+        EOF
+        exec /livekit-server --config /tmp/livekit.yaml
+    env_file: config.env
+    networks:
+      - dcts_internal
+      - caddy_network
+    volumes:
+      - ./DCTS-Data/caddy/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory:/certs:ro
+    ports:
+      - 7880:7880 # LiveKit API/WebSocket, must be reverse proxied
+      - 7881:7881 # ICE/TCP signaling, expose directly
+      - 7882:7882/udp # ICE/UDP mux, expose directly
+      # Optional TURN ports
+      - 3478:3478/udp
+      - 5349:5349/tcp
+
+  caddy:
+    container_name: caddy
+    image: slothcroissant/caddy-cloudflaredns:latest
+    restart: always
+    env_file: config.env
+    networks:
+      - caddy_network
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./DCTS-Data/caddy/data:/data
+      - ./DCTS-Data/caddy/config:/config
+
+volumes:
+  dcts-redis-data:
+
+networks:
+  dcts_internal:
+    driver: bridge
+    internal: true
+  caddy_network:
+    driver: bridge

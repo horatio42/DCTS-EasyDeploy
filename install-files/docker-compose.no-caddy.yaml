@@ -1,0 +1,82 @@
+# No-Caddy, No-SSL deployment
+services:
+  dcts-app:
+    container_name: dcts-app
+    image: ghcr.io/hackthedev/dcts-shipping:latest
+    depends_on:
+      - dcts-mariadb
+      - dcts-livekit
+    env_file: config.env
+    restart: unless-stopped
+    networks:
+      - dcts_network
+    ports:
+      - "2052:2052"
+    volumes:
+      - ./DCTS-Data/dcts-app/sv:/app/sv
+      - ./DCTS-Data/dcts-app/configs:/app/configs
+      - ./DCTS-Data/dcts-app/uploads:/app/public/uploads
+      - ./DCTS-Data/dcts-app/emojis:/app/public/emojis
+      - ./DCTS-Data/dcts-app/plugins:/app/plugins
+
+  dcts-mariadb:
+    container_name: dcts-mariadb
+    image: mariadb:latest
+    env_file: config.env
+    networks:
+      - dcts_network
+    volumes:
+      - ./DCTS-Data/MariaDB:/var/lib/mysql
+
+  dcts-redis:
+    container_name: dcts-redis
+    image: redis:alpine
+    networks:
+      - dcts_network
+    volumes:
+      - dcts-redis-data:/data
+
+  dcts-livekit:
+    container_name: dcts-livekit
+    image: livekit/livekit-server:latest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        cat > /tmp/livekit.yaml <<EOF
+        port: $${LK_PORT}
+        rtc:
+            tcp_port: $${LK_RTC_TCP_PORT}
+            udp_port: $${LK_RTC_UDP_PORT}
+            use_external_ip: $${LK_USE_EXTERNAL_IP}
+            enable_loopback_candidate: $${LK_ENABLE_LOOPBACK_CANDIDATE}
+        redis:
+            address: $${LK_REDIS_ADDRESS}
+            username: "$${LK_REDIS_USERNAME}"
+            password: $${LK_REDIS_PASSWORD}
+            db: $${LK_REDIS_DB}
+            use_tls: $${LK_REDIS_USE_TLS}
+        turn:
+            enabled: $${LK_TURN_ENABLED}
+            domain: $${LIVEKIT_DOMAIN}
+            udp_port: $${LK_TURN_UDP_PORT}
+            external_tls: $${LK_TURN_EXTERNAL_TLS}
+        keys:
+            $${LIVEKIT_KEY}: $${LIVEKIT_SECRET}
+        EOF
+        exec /livekit-server --config /tmp/livekit.yaml
+    env_file: config.env
+    networks:
+      - dcts_network
+    ports:
+      - 7880:7880 # LiveKit API/WebSocket
+      - 7881:7881 # ICE/TCP signaling
+      - 7882:7882/udp # ICE/UDP mux
+      - 3478:3478/udp # TURN UDP
+
+volumes:
+  dcts-redis-data:
+
+networks:
+  dcts_network:
+    driver: bridge

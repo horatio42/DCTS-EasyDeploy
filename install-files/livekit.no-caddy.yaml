@@ -1,0 +1,26 @@
+# Template reference for LiveKit configuration (no-SSL variant).
+# The actual config is generated at container startup from config.env values.
+# This file is NOT mounted into the container — it exists for documentation only.
+#
+# Differences from SSL variant:
+#   - No cert_file / key_file / tls_port
+#   - LK_TURN_EXTERNAL_TLS=false in config.env
+port: $LK_PORT
+rtc:
+    tcp_port: $LK_RTC_TCP_PORT
+    udp_port: $LK_RTC_UDP_PORT
+    use_external_ip: $LK_USE_EXTERNAL_IP
+    enable_loopback_candidate: $LK_ENABLE_LOOPBACK_CANDIDATE
+redis:
+    address: $LK_REDIS_ADDRESS
+    username: "$LK_REDIS_USERNAME"
+    password: $LK_REDIS_PASSWORD
+    db: $LK_REDIS_DB
+    use_tls: $LK_REDIS_USE_TLS
+turn:
+    enabled: $LK_TURN_ENABLED
+    domain: $LIVEKIT_DOMAIN
+    udp_port: $LK_TURN_UDP_PORT
+    external_tls: $LK_TURN_EXTERNAL_TLS
+keys:
+    $LIVEKIT_KEY: $LIVEKIT_SECRET
