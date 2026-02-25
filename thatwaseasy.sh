@@ -221,6 +221,8 @@ else
 fi
 echo ""
 
+ADMIN_TOKEN=""
+
 if ask_yn "Start the DCTS stack now?" "y"; then
     echo ""
     info "Starting containers... (this may take a moment on first run)"
@@ -232,6 +234,23 @@ if ask_yn "Start the DCTS stack now?" "y"; then
     echo ""
     docker compose ps
     echo ""
+
+    # Wait for dcts-app to emit the admin token
+    info "Waiting for DCTS to start and generate the admin token..."
+    for i in $(seq 1 60); do
+        ADMIN_TOKEN=$(docker logs dcts-app 2>&1 | grep -A1 "Server Admin Token:" | tail -1 | grep -oE '[0-9]{20,}' || true)
+        if [ -n "$ADMIN_TOKEN" ]; then
+            break
+        fi
+        sleep 2
+    done
+
+    if [ -n "$ADMIN_TOKEN" ]; then
+        success "Admin token captured!"
+    else
+        warn "Could not capture admin token within 2 minutes."
+        warn "Check manually with: docker logs dcts-app"
+    fi
 else
     echo ""
     info "You can start it later with:"
@@ -255,6 +274,12 @@ echo -e "  ${BOLD}Generated Credentials:${NC}"
 echo -e "    LiveKit Key:      ${CYAN}$LK_KEY${NC}"
 echo -e "    LiveKit Secret:   ${CYAN}$LK_SECRET${NC}"
 echo -e "    DB Password:      ${CYAN}$DB_PASS${NC}"
+if [ -n "$ADMIN_TOKEN" ]; then
+    echo -e "    Admin Token:      ${CYAN}$ADMIN_TOKEN${NC}"
+    echo ""
+    echo -e "  ${BOLD}Use the Admin Token to claim the admin role in DCTS.${NC}"
+    echo -e "  Right-click the server icon and select \"Redeem Key\"."
+fi
 echo ""
 echo -e "  These are stored in config.env. Keep it safe!"
 echo ""
